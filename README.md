@@ -1,7 +1,6 @@
 # Cross-Cloud Governance & Monitoring Hub
 
 > Centralized governance, observability, cost tracking, and SIEM integration across all platform workloads and cloud providers. Also incorporates incident resolution capabilities.
-> Part of the [Unified AI Platform Accelerator](docs/uaip_solution_architecture.md).
 
 ## Complete Solution Architecture
 For the **end-to-end solution architecture** spanning all platform services, networking, identity, and cross-cloud telemetry flows, see:
