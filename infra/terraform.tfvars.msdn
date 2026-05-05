@@ -1,0 +1,31 @@
+# MSDN PoC deployment values (ai-lz-rg-msdn-mb44x / i40e suffix)
+
+subscription_id = "1784740a-1cf6-416b-b3db-bda6985970aa"
+
+# --- ALZ resource references ---
+resource_group_name            = "ai-lz-rg-msdn-mb44x"
+location                       = "australiaeast"
+container_app_environment_name = "ai-alz-container-app-env-i40e"
+container_registry_name        = "genaicri40e"
+log_analytics_workspace_name   = "ai-alz-law"
+apim_name                      = "ai-alz-apim-i40e"
+key_vault_name                 = "genai-kv-i40e"
+ai_services_name               = "ai-foundry-i40e"
+azure_ai_deployment            = "gpt-4.1"
+
+# --- UC3 workload config ---
+governance_image_tag    = "latest"
+governance_min_replicas = 1
+governance_max_replicas = 2
+
+# --- Incident orchestration config (formerly UC4) ---
+service_bus_sku                   = "Standard"
+approval_timeout_minutes          = 60
+auto_approve_confidence_threshold = 0.95
+uc1_rag_endpoint                  = "" # Set after UC1 is deployed behind APIM
+
+tags = {
+  workload    = "uc3-governance-hub"
+  program     = "uaip"
+  environment = "poc-msdn"
+}

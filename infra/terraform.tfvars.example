@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars and fill in your ALZ resource values.
+
+subscription_id = "<your-subscription-id>"
+
+# --- ALZ resource references ---
+resource_group_name            = "<alz-resource-group>"
+location                       = "australiaeast"
+container_app_environment_name = "<alz-container-app-environment>"
+container_registry_name        = "<alz-container-registry>"
+log_analytics_workspace_name   = "<alz-log-analytics-workspace>"
+apim_name                      = "<alz-apim-instance>"
+key_vault_name                 = "<alz-key-vault>"
+ai_services_name               = "<alz-ai-services>"
+
+# --- UC3 workload config ---
+governance_image_tag    = "latest"
+governance_min_replicas = 1
+governance_max_replicas = 3
+
+tags = {
+  workload    = "uc3-governance-hub"
+  program     = "uaip"
+  environment = "poc"
+}

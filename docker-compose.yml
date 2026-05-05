@@ -1,0 +1,37 @@
+services:
+  governance-api:
+    build:
+      context: ./services/governance-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=uc3-governance-api
+      # Log Analytics workspace ID for KQL queries (mock in local dev)
+      - LOG_ANALYTICS_WORKSPACE_ID=mock-workspace-id
+      # Uncomment to export traces to Azure Monitor:
+      # - APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
+    depends_on:
+      otel-collector:
+        condition: service_started
+      mock-telemetry:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics (collector self)
+    volumes:
+      - ./services/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+
+  mock-telemetry:
+    build:
+      context: ./services/mock-telemetry
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - TELEMETRY_INTERVAL_SECONDS=5
+    depends_on:
+      otel-collector:
+        condition: service_started

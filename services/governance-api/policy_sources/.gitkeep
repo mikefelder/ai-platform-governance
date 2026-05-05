@@ -1,0 +1,4 @@
+# Build-staged copies of APIM Terraform (gateway policy sources) live here.
+# The Makefile `stage-policy-sources` target populates this directory from
+# `<repo>/infra/main.apim.tf` before `acr-build`/`build` runs.
+# Do NOT edit the .tf files here directly — they are overwritten on every build.
