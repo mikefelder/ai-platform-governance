@@ -2,10 +2,6 @@
 
 > Centralized governance, observability, cost tracking, and SIEM integration across all platform workloads and cloud providers. Also incorporates incident resolution capabilities.
 
-## Complete Solution Architecture
-For the **end-to-end solution architecture** spanning all platform services, networking, identity, and cross-cloud telemetry flows, see:
-
-**[docs/uaip_solution_architecture.md](docs/uaip_solution_architecture.md)** — full solution architecture reference.
 
 ## Introduction
 Start there for the big-picture view before diving into governance-specific details below.
