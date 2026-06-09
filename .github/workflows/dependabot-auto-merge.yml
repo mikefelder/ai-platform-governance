@@ -15,6 +15,9 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  MERGE_METHOD: squash
+
 concurrency:
   group: dependabot-auto-merge
   cancel-in-progress: false
@@ -31,6 +34,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const isEligibleState = (state) => state === 'clean';
+            const mergeMethod = process.env.MERGE_METHOD || 'squash';
 
             let pullNumbers = [];
 
@@ -53,11 +57,19 @@ jobs:
             }
 
             for (const pull_number of pullNumbers) {
-              const { data: pr } = await github.rest.pulls.get({
-                owner,
-                repo,
-                pull_number,
-              });
+              let pr;
+              for (let attempt = 0; attempt < 3; attempt += 1) {
+                const response = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number,
+                });
+                pr = response.data;
+                if (pr.mergeable !== null) {
+                  break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+              }
 
               if (pr.user?.login !== 'dependabot[bot]') {
                 core.info(`#${pull_number}: skipped (not opened by Dependabot).`);
@@ -86,7 +98,7 @@ jobs:
                   owner,
                   repo,
                   pull_number,
-                  merge_method: 'squash',
+                  merge_method: mergeMethod,
                   sha: pr.head.sha,
                 });
                 core.notice(`#${pull_number}: merged successfully.`);
