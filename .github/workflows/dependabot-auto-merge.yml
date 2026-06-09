@@ -17,6 +17,7 @@ permissions:
 
 env:
   MERGE_METHOD: squash
+  ELIGIBLE_MERGEABLE_STATES: clean
 
 concurrency:
   group: dependabot-auto-merge
@@ -33,8 +34,13 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const isEligibleState = (state) => state === 'clean';
             const mergeMethod = process.env.MERGE_METHOD || 'squash';
+            const eligibleStates = new Set(
+              (process.env.ELIGIBLE_MERGEABLE_STATES || 'clean')
+                .split(',')
+                .map((state) => state.trim())
+                .filter(Boolean)
+            );
             const MAX_RETRIES = 3;
             const RETRY_DELAY_MS = 3000;
 
@@ -59,16 +65,26 @@ jobs:
             for (const pull_number of pullNumbers) {
               let pr;
               for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
-                const response = await github.rest.pulls.get({
-                  owner,
-                  repo,
-                  pull_number,
-                });
-                pr = response.data;
+                try {
+                  const response = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number,
+                  });
+                  pr = response.data;
+                } catch (error) {
+                  core.warning(`#${pull_number}: skipped (unable to fetch PR details: ${error.message}).`);
+                  pr = null;
+                  break;
+                }
                 if (pr.mergeable !== null) {
                   break;
                 }
                 await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+              }
+
+              if (!pr) {
+                continue;
               }
 
               if (pr.mergeable === null) {
@@ -91,7 +107,7 @@ jobs:
                 continue;
               }
 
-              if (pr.mergeable !== true || !isEligibleState(pr.mergeable_state)) {
+              if (pr.mergeable !== true || !eligibleStates.has(pr.mergeable_state)) {
                 core.info(
                   `#${pull_number}: skipped (mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}).`
                 );
