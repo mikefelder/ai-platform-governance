@@ -1,0 +1,130 @@
+name: Dependabot Auto Merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  MERGE_METHOD: squash
+  ELIGIBLE_MERGEABLE_STATES: clean
+
+concurrency:
+  group: dependabot-auto-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: github.event_name == 'schedule' || github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge eligible Dependabot PRs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const mergeMethod = process.env.MERGE_METHOD || 'squash';
+            const eligibleStates = new Set(
+              (process.env.ELIGIBLE_MERGEABLE_STATES || 'clean')
+                .split(',')
+                .map((state) => state.trim())
+                .filter(Boolean)
+            );
+            const MAX_RETRIES = 3;
+            const RETRY_DELAY_MS = 3000;
+
+            let pullNumbers = [];
+
+            if (context.eventName === 'pull_request_target') {
+              pullNumbers = [context.payload.pull_request.number];
+            } else {
+              const search = await github.paginate(github.rest.search.issuesAndPullRequests, {
+                q: `repo:${owner}/${repo} is:pr is:open author:dependabot[bot]`,
+                per_page: 100,
+              });
+
+              pullNumbers = search.map((item) => item.number);
+            }
+
+            if (pullNumbers.length === 0) {
+              core.info('No open Dependabot PRs found.');
+              return;
+            }
+
+            for (const pull_number of pullNumbers) {
+              let pr;
+              for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
+                try {
+                  const response = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number,
+                  });
+                  pr = response.data;
+                } catch (error) {
+                  core.warning(`#${pull_number}: skipped (unable to fetch PR details: ${error.message}).`);
+                  pr = null;
+                  break;
+                }
+                if (pr.mergeable !== null) {
+                  break;
+                }
+                if (attempt < MAX_RETRIES - 1) {
+                  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+                }
+              }
+
+              if (!pr) {
+                continue;
+              }
+
+              if (pr.mergeable === null) {
+                core.warning(`#${pull_number}: skipped (mergeability still unknown after retries).`);
+                continue;
+              }
+
+              if (pr.user?.login !== 'dependabot[bot]') {
+                core.info(`#${pull_number}: skipped (not opened by Dependabot).`);
+                continue;
+              }
+
+              if (pr.draft) {
+                core.info(`#${pull_number}: skipped (draft).`);
+                continue;
+              }
+
+              if (pr.state !== 'open') {
+                core.info(`#${pull_number}: skipped (not open).`);
+                continue;
+              }
+
+              if (pr.mergeable !== true || !eligibleStates.has(pr.mergeable_state)) {
+                core.info(
+                  `#${pull_number}: skipped (mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}).`
+                );
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.merge({
+                  owner,
+                  repo,
+                  pull_number,
+                  merge_method: mergeMethod,
+                });
+                core.notice(`#${pull_number}: merged successfully.`);
+              } catch (error) {
+                core.warning(`#${pull_number}: merge skipped (${error.message}).`);
+              }
+            }
