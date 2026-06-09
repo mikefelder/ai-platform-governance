@@ -35,20 +35,20 @@ jobs:
             const repo = context.repo.repo;
             const isEligibleState = (state) => state === 'clean';
             const mergeMethod = process.env.MERGE_METHOD || 'squash';
+            const MAX_RETRIES = 3;
+            const RETRY_DELAY_MS = 3000;
 
             let pullNumbers = [];
 
             if (context.eventName === 'pull_request_target') {
               pullNumbers = [context.payload.pull_request.number];
             } else {
-              const pulls = await github.paginate(github.rest.pulls.list, {
-                owner,
-                repo,
-                state: 'open',
+              const search = await github.paginate(github.rest.search.issuesAndPullRequests, {
+                q: `repo:${owner}/${repo} is:pr is:open author:dependabot[bot]`,
                 per_page: 100,
               });
 
-              pullNumbers = pulls.map((pr) => pr.number);
+              pullNumbers = search.map((item) => item.number);
             }
 
             if (pullNumbers.length === 0) {
@@ -58,7 +58,7 @@ jobs:
 
             for (const pull_number of pullNumbers) {
               let pr;
-              for (let attempt = 0; attempt < 3; attempt += 1) {
+              for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
                 const response = await github.rest.pulls.get({
                   owner,
                   repo,
@@ -68,7 +68,12 @@ jobs:
                 if (pr.mergeable !== null) {
                   break;
                 }
-                await new Promise((resolve) => setTimeout(resolve, 3000));
+                await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+              }
+
+              if (pr.mergeable === null) {
+                core.warning(`#${pull_number}: skipped (mergeability still unknown after retries).`);
+                continue;
               }
 
               if (pr.user?.login !== 'dependabot[bot]') {
