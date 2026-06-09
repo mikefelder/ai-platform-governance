@@ -1,0 +1,98 @@
+name: Dependabot Auto Merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-auto-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: github.event_name == 'schedule' || github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge eligible Dependabot PRs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const isEligibleState = (state) => state === 'clean';
+
+            let pullNumbers = [];
+
+            if (context.eventName === 'pull_request_target') {
+              pullNumbers = [context.payload.pull_request.number];
+            } else {
+              const pulls = await github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+
+              pullNumbers = pulls
+                .filter((pr) => pr.user?.login === 'dependabot[bot]' && !pr.draft)
+                .map((pr) => pr.number);
+            }
+
+            if (pullNumbers.length === 0) {
+              core.info('No open Dependabot PRs found.');
+              return;
+            }
+
+            for (const pull_number of pullNumbers) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number,
+              });
+
+              if (pr.user?.login !== 'dependabot[bot]') {
+                core.info(`#${pull_number}: skipped (not opened by Dependabot).`);
+                continue;
+              }
+
+              if (pr.draft) {
+                core.info(`#${pull_number}: skipped (draft).`);
+                continue;
+              }
+
+              if (pr.state !== 'open') {
+                core.info(`#${pull_number}: skipped (not open).`);
+                continue;
+              }
+
+              if (pr.mergeable !== true || !isEligibleState(pr.mergeable_state)) {
+                core.info(
+                  `#${pull_number}: skipped (mergeable=${pr.mergeable}, mergeable_state=${pr.mergeable_state}).`
+                );
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.merge({
+                  owner,
+                  repo,
+                  pull_number,
+                  merge_method: 'squash',
+                  sha: pr.head.sha,
+                });
+                core.notice(`#${pull_number}: merged successfully.`);
+              } catch (error) {
+                core.warning(`#${pull_number}: merge skipped (${error.message}).`);
+              }
+            }
