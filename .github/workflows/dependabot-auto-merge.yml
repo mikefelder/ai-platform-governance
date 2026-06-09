@@ -80,7 +80,9 @@ jobs:
                 if (pr.mergeable !== null) {
                   break;
                 }
-                await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+                if (attempt < MAX_RETRIES - 1) {
+                  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+                }
               }
 
               if (!pr) {
@@ -120,7 +122,6 @@ jobs:
                   repo,
                   pull_number,
                   merge_method: mergeMethod,
-                  sha: pr.head.sha,
                 });
                 core.notice(`#${pull_number}: merged successfully.`);
               } catch (error) {
