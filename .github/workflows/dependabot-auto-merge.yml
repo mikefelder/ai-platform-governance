@@ -44,9 +44,7 @@ jobs:
                 per_page: 100,
               });
 
-              pullNumbers = pulls
-                .filter((pr) => pr.user?.login === 'dependabot[bot]' && !pr.draft)
-                .map((pr) => pr.number);
+              pullNumbers = pulls.map((pr) => pr.number);
             }
 
             if (pullNumbers.length === 0) {
