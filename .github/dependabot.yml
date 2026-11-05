@@ -10,6 +10,15 @@ updates:
       timezone: "UTC"
     open-pull-requests-limit: 5
 
+  - package-ecosystem: "pip"
+    directory: "/services/mock-telemetry"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+
   - package-ecosystem: "terraform"
     directory: "/infra"
     schedule:
@@ -23,6 +32,7 @@ updates:
     directories:
       - "/services/governance-api"
       - "/services/mock-telemetry"
+      - "/services/otel-collector"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -38,3 +48,12 @@ updates:
       time: "05:45"
       timezone: "UTC"
     open-pull-requests-limit: 2
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3

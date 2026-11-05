@@ -16,6 +16,7 @@ ai_services_name               = "<alz-ai-services>"
 governance_image_tag    = "latest"
 governance_min_replicas = 1
 governance_max_replicas = 3
+otel_collector_image    = "<your-acr>.azurecr.io/uc3-otel-collector:0.164.0"
 
 tags = {
   workload    = "uc3-governance-hub"

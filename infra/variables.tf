@@ -78,9 +78,8 @@ variable "governance_max_replicas" {
 }
 
 variable "otel_collector_image" {
-  description = "OTEL Collector container image."
+  description = "Registry reference for the custom Collector built from services/otel-collector. Build and push it before applying."
   type        = string
-  default     = "otel/opentelemetry-collector-contrib:0.100.0"
 }
 
 # -----------------------------------------------------------------------------

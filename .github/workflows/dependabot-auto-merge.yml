@@ -12,6 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  checks: read
   contents: write
   pull-requests: write
 
@@ -25,7 +26,7 @@ concurrency:
 
 jobs:
   merge:
-    if: github.event_name == 'schedule' || github.actor == 'dependabot[bot]'
+    if: github.event_name != 'pull_request_target' || github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Merge eligible Dependabot PRs
@@ -116,12 +117,31 @@ jobs:
                 continue;
               }
 
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                owner,
+                repo,
+                ref: pr.head.sha,
+                filter: 'latest',
+                per_page: 100,
+              });
+              const validation = checkRuns.filter(
+                (check) => check.name === 'Dependency validation' && check.app?.slug === 'github-actions'
+              );
+              if (
+                validation.length === 0 ||
+                validation.some((check) => check.status !== 'completed' || check.conclusion !== 'success')
+              ) {
+                core.info(`#${pull_number}: skipped (dependency validation has not succeeded).`);
+                continue;
+              }
+
               try {
                 await github.rest.pulls.merge({
                   owner,
                   repo,
                   pull_number,
                   merge_method: mergeMethod,
+                  sha: pr.head.sha,
                 });
                 core.notice(`#${pull_number}: merged successfully.`);
               } catch (error) {
