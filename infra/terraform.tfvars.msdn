@@ -17,6 +17,7 @@ azure_ai_deployment            = "gpt-4.1"
 governance_image_tag    = "latest"
 governance_min_replicas = 1
 governance_max_replicas = 2
+otel_collector_image    = "genaicri40e.azurecr.io/uc3-otel-collector:0.164.0"
 
 # --- Incident orchestration config (formerly UC4) ---
 service_bus_sku                   = "Standard"

@@ -9,6 +9,7 @@ IMAGE_NAME       ?= uc3-governance-api
 # IMAGE_TAG defaults to v<VERSION> (e.g. v0.2.0). Override via env/CLI to pin or test.
 VERSION          := $(shell cat VERSION 2>/dev/null | tr -d '[:space:]')
 IMAGE_TAG        ?= v$(VERSION)
+COLLECTOR_TAG    ?= 0.164.0
 GIT_SHA          := $(shell git rev-parse --short=7 HEAD 2>/dev/null)
 CONTAINER_APP    ?= ca-uc3-governance
 
@@ -18,7 +19,7 @@ FULL_IMAGE        = $(ACR_LOGIN_SERVER)/$(IMAGE_NAME):$(IMAGE_TAG)
 # Service directory
 SVC_DIR           = services/governance-api
 
-.PHONY: help login acr-login build push acr-build deploy test lint clean
+.PHONY: help login acr-login build push acr-build collector-build collector-acr-build deploy test lint clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -58,6 +59,17 @@ acr-build: stage-policy-sources ## Build image remotely using ACR Tasks. Tags bo
 		--file $(SVC_DIR)/Dockerfile \
 		$(SVC_DIR)
 
+collector-build: ## Build the component-scoped Collector locally
+	docker compose build otel-collector
+
+collector-acr-build: ## Build and push the patched Collector using ACR Tasks
+	az acr build \
+		--registry $(ACR_NAME) \
+		--subscription $(SUBSCRIPTION) \
+		--image uc3-otel-collector:$(COLLECTOR_TAG) \
+		--file services/otel-collector/Dockerfile \
+		services/otel-collector
+
 # --- Deploy ---
 
 deploy: ## Update the Container App to use the latest image
@@ -86,7 +98,7 @@ acr-disable-public: ## Re-disable ACR public network access
 # --- Development ---
 
 test: ## Run pytest for the governance-api
-	cd $(SVC_DIR) && pip install -e ".[dev]" && pytest -v
+	cd $(SVC_DIR) && pip install -r requirements.txt -e ".[dev]" && pytest -v
 
 lint: ## Run ruff linter
 	cd $(SVC_DIR) && pip install ruff && ruff check src/ tests/

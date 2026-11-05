@@ -182,7 +182,7 @@ Incident resolution workflows are integrated into the Governance Hub with AI-dri
 ```
 services/
   governance-api/            # FastAPI governance service
-    Dockerfile               # python:3.11-slim, uvicorn on port 8000
+    Dockerfile               # python:3.14-alpine, uvicorn on port 8000
     src/governance_api/
       main.py                # FastAPI app with 9 routers
       routers/
@@ -211,7 +211,9 @@ services/
         policy.py            # Governance policy models
     tests/                   # 12 test files covering all routers
 
-  otel-collector/            # OTEL Collector configuration
+  otel-collector/            # Component-scoped Collector build and configuration
+    Dockerfile               # Static, non-root runtime; no unused Contrib components
+    builder-config.yaml      # Explicit Collector components and dependency fixes
     otel-collector-config.yaml   # OTLP receivers, batch, transform, Azure Monitor export
 
   mock-telemetry/            # Mock telemetry generator for testing
@@ -253,7 +255,17 @@ az acr build --registry genaicri40e \
 az acr update -n genaicri40e --default-action Deny
 ```
 
+Build and push the custom Collector before deploying infrastructure:
+
+```bash
+make collector-acr-build ACR_NAME=<your-acr> SUBSCRIPTION=<your-subscription-id>
+```
+
 ### 2. Deploy Infrastructure
+
+Set `otel_collector_image` in your tfvars to the registry reference produced
+above, such as `<your-acr>.azurecr.io/uc3-otel-collector:0.164.0`.
+There is deliberately no upstream Contrib image fallback.
 
 ```bash
 cd infra
@@ -287,9 +299,58 @@ az containerapp revision list -n ca-uc3-otel-collector \
 
 ```bash
 cd services/governance-api
-pip install -r requirements.txt
+export PIP_INDEX_URL=https://packagefeedproxy.microsoft.io/pypi/simple/
+pip install -r requirements.txt -e ".[dev]"
 pytest tests/ -v
 ```
+
+### Dependency Security
+
+Both Python images install their checked-in `requirements.txt` runtime pins.
+They use a digest-pinned Python 3.14 Alpine base to avoid the unresolved
+Debian package advisories in the previous slim image. Runtime dependencies
+must have prebuilt wheels. pip and its bundled ensurepip wheel are removed
+after installation, eliminating vulnerable build-only vendored packages.
+The API manifest requires PyJWT >= 2.14.0 to exclude versions affected by
+GHSA-p4g4-x82p-q773, GHSA-pxh4-856f-4h89, and related advisories; the runtime
+pin is 2.15.1. The API only accepts RS256 tokens, so the HMAC token-forgery
+advisories do not establish an authentication bypass in this application.
+
+To refresh the runtime pins, run these commands from the repository root,
+then run the tests and dependency-validation workflow:
+
+```bash
+export UV_DEFAULT_INDEX=https://packagefeedproxy.microsoft.io/pypi/simple/
+uv pip compile services/governance-api/pyproject.toml --universal --no-annotate \
+  --output-file services/governance-api/requirements.txt
+uv pip compile services/mock-telemetry/requirements.in --universal --no-annotate \
+  --output-file services/mock-telemetry/requirements.txt
+uv tool run pip-audit --strict --disable-pip --no-deps --vulnerability-service osv \
+  -r services/governance-api/requirements.txt \
+  -r services/mock-telemetry/requirements.txt
+```
+
+Dependabot monitors both Python services, all three Dockerfiles, Compose,
+Terraform, and GitHub Actions. The Collector is built with only the components
+used by its checked-in configuration, excluding the unused authentication
+components that pulled in vulnerable go-jose. Its builder manifest also pins
+fixed `golang.org/x/crypto` and `golang.org/x/net` versions. Review that manifest
+when upgrading Collector components or when the image audit reports a Go
+dependency advisory.
+
+Compose builds the custom Collector locally. Azure deployments must explicitly
+select a built and pushed custom image using `otel_collector_image`; the
+configuration tests reject reintroducing an upstream image default. Rebuild and
+redeploy existing services to apply these changes to running workloads.
+
+The dependency-validation workflow runs on PRs, pushes to `main`, and daily.
+It tests the API, audits pinned runtime packages with OSV, builds all three images,
+checks the packaged API and Collector configuration, and scans the actual runtime
+images with Trivy at all severities, including unfixed findings. Dependabot
+auto-merge requires this check to succeed for the exact PR head commit;
+mergeability alone is insufficient.
+Repository administrators must keep Dependabot alerts and automatic security
+updates enabled in GitHub settings.
 
 ### 5. Demo Lifecycle (Spin-Down / Spin-Up)
 
